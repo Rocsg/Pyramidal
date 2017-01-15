@@ -8,4 +8,5 @@ The current version let the player fighting against the AI. We can choose betwee
 
 AI is very strong, but it's just a baby ! The parameters are set intuitively. Next step should be to run machine learning to tune parameters, and set it unvincible !
 
- 
+Enjoy !
+
