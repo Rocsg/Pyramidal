@@ -26,6 +26,14 @@ GameMainWindow::GameMainWindow()
     m_pyramidSize=7;
     m_nbPlayers=2;
     m_nbTotMarbles=0;
+    m_playedMarbles=0;
+    m_kindOfGame=0;
+
+    //Valeurs de l'AI 0, 1, 2, 3: nb_billes, centrage_bille, altitude_bille, influence_globale
+    //Valeurs de l'AI 4, 5, 6, 7: influence_locale_nb_carre_avec_une_bille, influence_locale...deux_billes, infl....trois_billes, infl...quatre billes
+    m_coefsAI.push_back(std::vector < double > ({25,5,4,1,-3,12,20,12})); // Vecteur standard au feeling
+    m_coefsAI.push_back(std::vector < double > ({1,5,4,5,-3,12,20,12})); // Vecteur standard au feeling
+//    std::vector < double > coefsAI2 =std::vector < double > ({25,5,4,2,-3,12,20,12}); // Vecteur standard au feeling
 
 
     //Make a render window and an interactor
@@ -79,29 +87,28 @@ void GameMainWindow::getInformedAboutAnActor(vtkActor *actor){
  */
 void GameMainWindow::actionStartGame()
 {
-    std::vector < double > coefsAI =std::vector < double > ({14,2,4,3,3,9,18,12});
-    if(m_gameIsRunning || (m_nbTotMarbles==m_playedMarbles)){// When game is already running, we have to break current game first.
+    //If game is already running, or if game is over, break current game first
+    if(m_gameIsRunning || (m_nbTotMarbles!=0 && (m_nbTotMarbles==m_playedMarbles))){// When game is already running, we have to break current game first.
         m_gameIsRunning=false;
         m_playersScores.clear();
         delete m_PyramidModel;
         m_renderer->RemoveAllViewProps();
     }
 
-    //Run a new game
-    m_nbTotMarbles=0;
-    for(int level=1;level<=m_pyramidSize;level++)
-    {
-        m_nbTotMarbles+=(level*level);
-    }
-    m_playedMarbles=0;
-    int score=0;
+
+    //Initialize parameters
+    cout<<"Début de nouvelle partie !"<<endl;
     m_playersScores=std::vector< int >(m_nbPlayers,0);
     this->ui->barrePartie->setValue(0);
     m_gameIsRunning=true;
-    cout<<"Début de nouvelle partie !"<<endl;
+    int score=0;
+    m_playedMarbles=0;
+    m_nbTotMarbles=0;
+    for(int level=1;level<=m_pyramidSize;level++)m_nbTotMarbles+=(level*level);
 
-    //initialisation du plateau de jeu
-    m_PyramidModel=new PyramidModel(this,m_pyramidSize,m_nbPlayers,m_nbTotMarbles);
+
+    //initialize the model according to game parameters
+    m_PyramidModel=new PyramidModel(this,m_pyramidSize,m_nbPlayers,m_nbTotMarbles,m_kindOfGame);
     m_pyramidExist=true;
     m_renderer->ResetCamera();
     m_mouseInteractor->StopState();
@@ -110,54 +117,90 @@ void GameMainWindow::actionStartGame()
                              QString(" marbles. Your turn, player ")+QString::number(m_currentPlayer+1));
 
 
+    //Run a game with AI versus AI
+    if(m_kindOfGame==KOG_AI_VS_AI_GRAPHICAL){
+        while(m_nbTotMarbles != m_playedMarbles){
+            aiPlaysThisMarble(m_PyramidModel->nextMoveAI(0,m_currentPlayer,false,m_coefsAI[m_currentPlayer]));
+            nextPlayer(false);
+            if(m_nbTotMarbles != m_playedMarbles)aiPlaysThisMarble(m_PyramidModel->nextMoveAI(0,m_currentPlayer,false,m_coefsAI[m_currentPlayer]));
+            nextPlayer(false);
+        }
+    }
 
-    //If "trés difficile" selected, AI plays first. Else, application will wait for the human to play first
-    if(m_difficulty==1){
-        m_currentPlayer=1;
-        thisMarblePlayed(m_PyramidModel->nextMoveAI(0,1,false,coefsAI));
+    else if(m_kindOfGame==KOG_AI_VS_PLAYER){
+        //If "trés difficile" selected, AI plays first. Else, it will wait for the human to play first
+        if(m_difficulty==1){
+            aiPlaysThisMarble(m_PyramidModel->nextMoveAI(0,m_currentPlayer,false,m_coefsAI[m_currentPlayer]));
+            nextPlayer(false);
+        }
+    }
+
+    else if(m_kindOfGame==KOG_AI_VS_AI_QUIET){
+        while(m_nbTotMarbles != m_playedMarbles){
+            aiPlaysThisMarble(m_PyramidModel->nextMoveAI(0,m_currentPlayer,false,m_coefsAI[m_currentPlayer]));
+            nextPlayer(true);
+            if(m_nbTotMarbles != m_playedMarbles)aiPlaysThisMarble(m_PyramidModel->nextMoveAI(0,m_currentPlayer,false,m_coefsAI[m_currentPlayer]));
+            nextPlayer(true);
+        }
+        nextPlayer(false);
     }
 }
 
-
-
-void GameMainWindow::thisMarblePlayed(vtkActor *actor){
-    if(!m_gameIsRunning){
-        cout<<"La partie est finie"<<endl;
-        return;
-    }
-    std::vector < double > coefsAI =std::vector < double > ({25,5,4,2,-3,12,20,12}); // Vecteur standard au feeling
-//    std::vector < double > coefsAI =std::vector < double > ({1,0,0,0,0,0,0,0}); //Test du facteur billes --> ok
-//    std::vector < double > coefsAI =std::vector < double > ({0,1,0,0,0,0,0,0}); //Test center --> ok
-//    std::vector < double > coefsAI =std::vector < double > ({0,0,1,0,0,0,0,0}); //Test altitude --> ok
-//    std::vector < double > coefsAI =std::vector < double > ({0,0,0,1,0,0,0,0}); //Test qui ferait de l'occupation de l'espace --> parfait
-//    std::vector < double > coefsAI =std::vector < double > ({0,0,0,0,1,0,0,0}); //Test qui ferait des 1 --> ok
-//    std::vector < double > coefsAI =std::vector < double > ({0,0,0,0,0,1,0,0}); //Test qui ferait des 2 ? --> ok
-//    std::vector < double > coefsAI =std::vector < double > ({0,0,0,0,0,0,1,0}); //Test qui ferait des 3 --> ok
-//    std::vector < double > coefsAI =std::vector < double > ({0,0,0,0,0,0,0,1}); //Test qui ferait des 4 --> ok
-
-    int score=m_PyramidModel->playThisMarble(actor,m_currentPlayer);
-    m_playedMarbles+=score;
-    this->ui->scoreJ1->setText(QString("Player 1 : ")+QString::number(m_playersScores[0])+QString(" marbles"));
-    this->ui->scoreJ2->setText(QString("Player 2 : ")+QString::number(m_playersScores[1])+QString(" marbles"));
-    this->ui->barrePartie->setValue(100.0*m_playedMarbles/m_nbTotMarbles);
-    if(m_playedMarbles==m_nbTotMarbles)m_gameIsRunning=false;
-
-
-    if(!m_gameIsRunning){
-        cout<<"La partie est finie"<<endl;
-        if(m_playersScores[0]>m_playersScores[1])this->ui->label->setText(QString("Player 1 wins !"));
-        else this->ui->label->setText(QString("Player 2 wins !"));
-        return;
-    }
-
-    if(score>0){
-        m_currentPlayer++;
-        if(m_currentPlayer==m_nbPlayers)m_currentPlayer=0;
+void GameMainWindow::nextPlayer(bool quiet){
+    m_currentPlayer=1-m_currentPlayer;
+    if(! quiet){
         this->ui->label->setText(QString("Pyramid with ")+QString::number(m_nbTotMarbles)+
                                  QString(" marbles. Your turn, player ")+QString::number(m_currentPlayer+1));
-        if(m_currentPlayer==1)thisMarblePlayed(m_PyramidModel->nextMoveAI(0,1,true,coefsAI));
+        this->ui->scoreJ1->setText(QString("Player 1 : ")+QString::number(m_playersScores[0])+QString(" marbles"));
+        this->ui->scoreJ2->setText(QString("Player 2 : ")+QString::number(m_playersScores[1])+QString(" marbles"));
+        this->ui->barrePartie->setValue(100.0*m_playedMarbles/m_nbTotMarbles);
+    }
+    if(m_playedMarbles==m_nbTotMarbles)m_gameIsRunning=false;
+    if(!m_gameIsRunning){
+        cout<<"La partie est finie"<<endl;
+        if(m_playersScores[0] > m_playersScores[1])this->ui->label->setText(QString("Player 1 wins !"));
+        else if (m_playersScores[0] < m_playersScores[1])this->ui->label->setText(QString("Player 2 wins !"));
+        else this->ui->label->setText(QString("End of match : draw !"));
+        return;
     }
 }
+
+
+
+
+void GameMainWindow::aiPlaysThisMarble(int hashcode){
+    if(!m_gameIsRunning){
+        cout<<"La partie est finie"<<endl;
+        return;
+    }
+    int score=m_PyramidModel->playThisMarble(hashcode,m_currentPlayer);
+    m_playedMarbles+=score;
+    if(m_playedMarbles==m_nbTotMarbles)m_gameIsRunning=false;
+}
+
+
+
+
+void GameMainWindow::humanPlaysThisMarble(vtkActor *actor){
+    if(!m_gameIsRunning){
+        cout<<"La partie est finie"<<endl;
+        return;
+    }
+
+    int score=m_PyramidModel->playThisMarble(m_PyramidModel->identifyActiveMarble(actor,false),m_currentPlayer);
+    m_playedMarbles+=score;
+    if(score>0)
+    {//prevent from clicking outside from any marble and that the AI plays as well
+        nextPlayer(false);
+        aiPlaysThisMarble(m_PyramidModel->nextMoveAI(0,m_currentPlayer,true,m_coefsAI[m_currentPlayer]));
+        nextPlayer(false);
+    }
+}
+
+
+
+
+
 
 void GameMainWindow::actionDefinir_la_configuration_de_la_partie()
 {
@@ -170,13 +213,22 @@ void GameMainWindow::actionDefinir_la_configuration_de_la_partie()
     QComboBox* comB=new QComboBox();
     comB->addItem("Difficult (You play first)");
     comB->addItem("Very difficult (AI plays first)");
-    comB->setCurrentIndex(0);
+    comB->setCurrentIndex(m_difficulty);
 
     //Ajouter un Qchiffre pour la taille du plateau
     QLabel *labSize=new QLabel();
     labSize->setText(QString("Choose the board size :"));
     QSpinBox* spB=new QSpinBox();
-    spB->setValue(7);
+    spB->setValue(m_pyramidSize);
+
+    //Ajouter un QComboBox pour le type de partie
+    QLabel *labKind=new QLabel();
+    labKind->setText(QString("Choose the kind of game :"));
+    QComboBox* comB2=new QComboBox();
+    comB2->addItem("AI versus Player");
+    comB2->addItem("AI versus AI with graphics");
+    comB2->addItem("AI versus AI quiet");
+    comB2->setCurrentIndex(m_kindOfGame);
 
     //Ajouter un QButton pour terminer les réglages
     QPushButton* valid=new QPushButton();
@@ -186,9 +238,14 @@ void GameMainWindow::actionDefinir_la_configuration_de_la_partie()
     QGridLayout *vbox = new QGridLayout;
     vbox->addWidget(labDif,1,1,1,2);
     vbox->addWidget(comB,1,3,1,1);
-    vbox->addWidget(labSize,2,1,1,2);
-    vbox->addWidget(spB,2,3,1,1);
-    vbox->addWidget(valid,3,1,2,3);
+
+    vbox->addWidget(labKind,2,1,1,2);
+    vbox->addWidget(comB2,2,3,1,1);
+
+    vbox->addWidget(labSize,3,1,1,2);
+    vbox->addWidget(spB,3,3,1,1);
+
+    vbox->addWidget(valid,4,1,2,3);
     dialog->setLayout(vbox);
     connect(valid, SIGNAL(clicked()), dialog, SLOT(accept()));
     dialog->exec();
@@ -196,6 +253,7 @@ void GameMainWindow::actionDefinir_la_configuration_de_la_partie()
     //Récuperation des données et action
     m_difficulty=comB->currentIndex();
     m_pyramidSize=spB->value();
+    m_kindOfGame=comB2->currentIndex();
     delete comB;
     delete spB;
     delete valid;

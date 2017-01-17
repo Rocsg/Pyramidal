@@ -13,7 +13,7 @@ PyramidModel::PyramidModel()
 }
 
 
-PyramidModel::PyramidModel(GameMainWindow *gmw,int pyramidSize,int nbPlayers,int nbTotMarbles):
+PyramidModel::PyramidModel(GameMainWindow *gmw,int pyramidSize,int nbPlayers,int nbTotMarbles,int kindOfGame):
     gameIndicators(pyramidSize,std::vector<std::vector<int > > (pyramidSize, std::vector<int > (pyramidSize,-3))),
     AIMarkers(pyramidSize,std::vector<std::vector<int > > (pyramidSize, std::vector<int > (pyramidSize,-3))),
     tabSphereActor(pyramidSize,std::vector<std::vector<vtkSmartPointer<vtkActor> > > (pyramidSize, std::vector<vtkSmartPointer<vtkActor> > (pyramidSize,NULL))),
@@ -21,22 +21,27 @@ PyramidModel::PyramidModel(GameMainWindow *gmw,int pyramidSize,int nbPlayers,int
     tabSphereMapper(pyramidSize,std::vector<std::vector<vtkSmartPointer<vtkPolyDataMapper> > > (pyramidSize, std::vector<vtkSmartPointer<vtkPolyDataMapper> > (pyramidSize,NULL))),
     m_nbPlayers(nbPlayers),
     m_pyramidSize(pyramidSize),
-    m_gmw(gmw)
+    m_gmw(gmw),
+    m_kindOfGame(kindOfGame)
 {
 
-    //Calcul de la resolution graphique des billes
-    int polygonPerMarble=MAX_NB_POLYGON/nbTotMarbles;
-    int val=sqrt(polygonPerMarble/2);
-    m_thetRes=2*val;
-    m_phiRes=val;
-    m_thetRes= (6 <= m_thetRes) ? m_thetRes : 6;
-    m_phiRes= (4 <= m_phiRes) ? m_phiRes : 4;
-    int totPolygon=m_phiRes *m_thetRes* nbTotMarbles;
-    if(totPolygon>MAX_NB_POLYGON){
-        cout<<"Warning : end of game will see "<<totPolygon<<" polygons displayed. There exists a risk of graphical overflow"<<endl;
-    }
-    cout<<"Résolution choisie pour chaque bille : selon le diametre ="<<m_thetRes<<" et selon un meridien ="<<m_phiRes<<endl;
+    if(kindOfGame==KOG_AI_VS_AI_QUIET)m_quiet=true;
 
+
+    if(! m_quiet){
+        //Calcul de la resolution graphique des billes
+        int polygonPerMarble=MAX_NB_POLYGON/nbTotMarbles;
+        int val=sqrt(polygonPerMarble/2);
+        m_thetRes=2*val;
+        m_phiRes=val;
+        m_thetRes= (6 <= m_thetRes) ? m_thetRes : 6;
+        m_phiRes= (4 <= m_phiRes) ? m_phiRes : 4;
+        int totPolygon=m_phiRes *m_thetRes* nbTotMarbles;
+        if(totPolygon>MAX_NB_POLYGON){
+            cout<<"Warning : end of game will see "<<totPolygon<<" polygons displayed. There exists a risk of graphical overflow"<<endl;
+        }
+        cout<<"Résolution choisie pour chaque bille : selon le diametre ="<<m_thetRes<<" et selon un meridien ="<<m_phiRes<<endl;
+    }
 
     //initialiser la zone de utilisable dans le jeu et la zone jouable en début de partie : le bas du plateau
     for(int level=0;level<pyramidSize;level++)
@@ -91,29 +96,31 @@ PyramidModel::~PyramidModel()
 
 void PyramidModel::setNewPlayableMarble(int level,int row, int column){
     gameIndicators[level][row][column]=0;
-    if(tabSphereSource[level][row][column]!=NULL){
-        cout<<"Tentative d'ajout d'une bille jouable déja existante à "<<level<<","<<row<<","<<column<<endl;
-        return;
+    if(!m_quiet){
+        if(tabSphereSource[level][row][column]!=NULL){
+            cout<<"Tentative d'ajout d'une bille jouable déja existante à "<<level<<","<<row<<","<<column<<endl;
+            return;
+        }
+        tabSphereSource[level][row][column]=vtkSmartPointer<vtkSphereSource>::New();
+        tabSphereSource[level][row][column]->SetRadius(MARBLE_SIZE);
+        tabSphereSource[level][row][column]->SetThetaResolution(m_thetRes);//24 min : 8
+        tabSphereSource[level][row][column]->SetPhiResolution(m_phiRes);//12 min : 4
+        tabSphereSource[level][row][column]->SetCenter(MARBLE_SIZE*2*(1+SPACING)*(row+level/2.0),MARBLE_SIZE*2*(1+SPACING)*(column+level/2.0) ,MARBLE_SIZE*(level)*sqrt(3)/1.25 );
+        tabSphereSource[level][row][column]->Update();
+
+        tabSphereMapper[level][row][column]= vtkSmartPointer<vtkPolyDataMapper>::New();
+        tabSphereMapper[level][row][column]->SetInputConnection(tabSphereSource[level][row][column]->GetOutputPort());
+
+        tabSphereActor[level][row][column]=vtkSmartPointer<vtkActor>::New();
+        (tabSphereActor[level][row][column])->SetMapper(tabSphereMapper[level][row][column]);
+        (tabSphereActor[level][row][column])->GetProperty()->SetColor(0.6+0.4*(level+1)/(1.0*m_pyramidSize), 0.6+0.4*(level+1)/(1.0*m_pyramidSize), 0.6+0.4*(level+1)/(1.0*m_pyramidSize)); //(R,G,B)
+        (tabSphereActor[level][row][column])->GetProperty()->SetOpacity(0.20); //(R,G,B)
+        (tabSphereActor[level][row][column])->GetProperty()->SetInterpolationToPhong(); //(R,G,B)
+        m_gmw->publishActor(tabSphereActor[level][row][column]);
     }
-    tabSphereSource[level][row][column]=vtkSmartPointer<vtkSphereSource>::New();
-    tabSphereSource[level][row][column]->SetRadius(MARBLE_SIZE);
-    tabSphereSource[level][row][column]->SetThetaResolution(m_thetRes);//24 min : 8
-    tabSphereSource[level][row][column]->SetPhiResolution(m_phiRes);//12 min : 4
-    tabSphereSource[level][row][column]->SetCenter(MARBLE_SIZE*2*(1+SPACING)*(row+level/2.0),MARBLE_SIZE*2*(1+SPACING)*(column+level/2.0) ,MARBLE_SIZE*(level)*sqrt(3)/1.25 );
-    tabSphereSource[level][row][column]->Update();
-
-    tabSphereMapper[level][row][column]= vtkSmartPointer<vtkPolyDataMapper>::New();
-    tabSphereMapper[level][row][column]->SetInputConnection(tabSphereSource[level][row][column]->GetOutputPort());
-
-    tabSphereActor[level][row][column]=vtkSmartPointer<vtkActor>::New();
-    (tabSphereActor[level][row][column])->SetMapper(tabSphereMapper[level][row][column]);
-    (tabSphereActor[level][row][column])->GetProperty()->SetColor(0.6+0.4*(level+1)/(1.0*m_pyramidSize), 0.6+0.4*(level+1)/(1.0*m_pyramidSize), 0.6+0.4*(level+1)/(1.0*m_pyramidSize)); //(R,G,B)
-    (tabSphereActor[level][row][column])->GetProperty()->SetOpacity(0.20); //(R,G,B)
-    (tabSphereActor[level][row][column])->GetProperty()->SetInterpolationToPhong(); //(R,G,B)
-    m_gmw->publishActor(tabSphereActor[level][row][column]);
     if(level>m_currentStage){
         m_currentStage=level;
-        m_gmw->m_renderer->ResetCamera();
+        if(!m_quiet)m_gmw->m_renderer->ResetCamera();
     }
 }
 
@@ -142,8 +149,8 @@ void PyramidModel::getInformedAboutAnActor(vtkActor *actor){
 
 
 int PyramidModel::identifyActiveMarble(vtkActor* actor,bool verbose){
-    if (actor==NULL)return -1;
     int ret;
+    if (actor==NULL)return -1;
     for(int level=0;level<m_pyramidSize;level++)
     {
         for(int row=0;row<m_pyramidSize-level;row++)
@@ -324,7 +331,9 @@ void PyramidModel::computeAIScores(bool verbose, std::vector <double> const & aI
 }
 
 
-
+int PyramidModel::toHashCode(int l,int r, int c){
+    return(c+r*m_pyramidSize+l*m_pyramidSize*m_pyramidSize);
+}
 
 
 /**
@@ -335,7 +344,7 @@ void PyramidModel::computeAIScores(bool verbose, std::vector <double> const & aI
  * @param aIFactors
  * @return The vtkActor* representing the selected marble that the AI wants to play
  */
-vtkActor* PyramidModel::nextMoveAI(int difficulty,int currentPlayer,bool verbose,std::vector <double> aIFactors){
+int PyramidModel::nextMoveAI(int difficulty,int currentPlayer,bool verbose,std::vector <double> aIFactors){
     if(aIFactors.size()<8){
         cout<<"Erreur critique : moins de 8 facteurs de l'AI"<<endl;
         exit;
@@ -501,8 +510,10 @@ vtkActor* PyramidModel::nextMoveAI(int difficulty,int currentPlayer,bool verbose
     //Recherche du coup optimal
     double max=-10000000;
     int movMax=0;
-    cout<<"Recherche du maximum"<<endl;
-    vtkActor *actor=tabSphereActor[0][0][0];
+    int maxL=0;
+    int maxR=0;
+    int maxC=0;
+
     for(int mov=0;mov<possMoves;mov++){
  /*     Utile pour du profilage des parametres, cette séquence liste les 8 scores obtenus pour chaque coup, et le score issu de la ponderation
      cout<<"Coup numéro "<<mov<<", coord=("<<moves[mov][0]<<","<<moves[mov][1]<<","<<moves[mov][2]<<"), score="<<scoreFinalMove[mov];
@@ -517,7 +528,9 @@ vtkActor* PyramidModel::nextMoveAI(int difficulty,int currentPlayer,bool verbose
         if(scoreFinalMove[mov]>max){
             max=scoreFinalMove[mov];
             movMax=mov;
-            actor=tabSphereActor[moves[mov][0]][moves[mov][1]][moves[mov][2]];
+            maxL=moves[mov][0];
+            maxR=moves[mov][1];
+            maxC=moves[mov][2];
         }
      }
     if(verbose)cout<<"AI : coup à jouer : coup numero "<<movMax<<endl<<endl;
@@ -527,7 +540,7 @@ vtkActor* PyramidModel::nextMoveAI(int difficulty,int currentPlayer,bool verbose
     mask.clear();
     maskR.clear();
     maskC.clear();
-    return actor;
+    return(toHashCode(maxL,maxR,maxC));
 }
 
 
@@ -544,19 +557,18 @@ int PyramidModel::howMany(int val1,int val2,int val3,int val4,int num){
 
 
 //Une amélioration de cette fonction consisterait à la rendre récursive, pour remplacer le parcours en largeur
-int PyramidModel::playThisMarble(vtkActor* actor,int player)
+int PyramidModel::playThisMarble(int hashcode,int player)
 {
-    int hashcode=identifyActiveMarble(actor,false);
+    int plev,prow,pcol;
     if(hashcode==-1)return 0;
-    int plev=hashcode/(m_pyramidSize*m_pyramidSize);
+    plev=hashcode/(m_pyramidSize*m_pyramidSize);
     hashcode-=(plev*m_pyramidSize*m_pyramidSize);
-    int prow=hashcode/(m_pyramidSize);
-    int pcol=hashcode-(prow*m_pyramidSize);
+    prow=hashcode/(m_pyramidSize);
+    pcol=hashcode-(prow*m_pyramidSize);
 
     //Check if the marble is playable. If not, exit, else, own it.
     if(gameIndicators[plev][prow][pcol]!=0)return 0;
     ownedMarble(plev,prow,pcol,player);
-
 
     //Actualize grid : recursive search for new possessed marbles
     int nbAdd=1;
@@ -670,24 +682,29 @@ int PyramidModel::playThisMarble(vtkActor* actor,int player)
         }
         nbAddTot+=nbAdd;
     }
-    m_gmw->m_mouseInteractor->StopState();
+    if(! m_quiet)m_gmw->m_mouseInteractor->StopState();
     return nbAddTot;
 }
 
 
 void PyramidModel::ownedMarble(int l,int r,int c,int player){
     if(gameIndicators[l][r][c]!=0) setNewPlayableMarble(l,r,c);
+    cout<<"Owned : ajout de "<<l<<","<<r<<","<<c<<","<<(player+1)<<endl;
     (m_gmw->m_playersScores[player])++;
-    if(player==0)(tabSphereActor[l][r][c])->GetProperty()->SetColor(0.6+0.4*(l+1)/(1.0*m_pyramidSize), 0, 0); //(R,G,B)
-    if(player==1)(tabSphereActor[l][r][c])->GetProperty()->SetColor(0, 0, 0.6+0.4*(l+1)/(1.0*m_pyramidSize)); //(R,G,B)
-    (tabSphereActor[l][r][c])->GetProperty()->SetOpacity(1); //(R,G,B)
-    (tabSphereActor[l][r][c])->GetProperty()->SetInterpolationToPhong(); //(R,G,B)
     gameIndicators[l][r][c]=player+1;
-    std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    m_gmw->m_mouseInteractor->StopState();
+
+    if(!m_quiet){
+        if(player==0)(tabSphereActor[l][r][c])->GetProperty()->SetColor(0.6+0.4*(l+1)/(1.0*m_pyramidSize), 0, 0); //(R,G,B)
+        if(player==1)(tabSphereActor[l][r][c])->GetProperty()->SetColor(0, 0, 0.6+0.4*(l+1)/(1.0*m_pyramidSize)); //(R,G,B)
+        (tabSphereActor[l][r][c])->GetProperty()->SetOpacity(1); //(R,G,B)
+        (tabSphereActor[l][r][c])->GetProperty()->SetInterpolationToPhong(); //(R,G,B)
+        std::this_thread::sleep_for(std::chrono::milliseconds(T_WAIT_BEFORE_ACTIVATE_NEXT_MARBLE));
+
+    }
+    if(m_currentStage==m_pyramidSize-1)m_gmw->m_mouseInteractor->StopState();
     if(l>m_currentStage){
         m_currentStage=l;
-        m_gmw->m_renderer->ResetCamera();
+        if(!m_quiet || m_currentStage==m_pyramidSize-1)m_gmw->m_renderer->ResetCamera();
     }
 }
 

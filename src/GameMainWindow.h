@@ -38,13 +38,17 @@ public slots:
     void actionStartGame();
     void unpublishActor(vtkSmartPointer<vtkActor> actor);
     void publishActor(vtkSmartPointer<vtkActor> actor);
-    void thisMarblePlayed(vtkActor *actor);
+    void humanPlaysThisMarble(vtkActor *actor);
+    void aiPlaysThisMarble(int hashcode);
     void getInformedAboutAnActor(vtkActor *actor);
 
 private:
+    std::vector < std::vector < double > > m_coefsAI;
+    void nextPlayer(bool quiet);
     Ui_GameMainWindow *ui;
     bool m_gameIsRunning;
     bool m_pyramidExist;
+    int m_kindOfGame;
     int m_pyramidSize;
     int m_difficulty;
     int m_nbTotMarbles;

@@ -21,7 +21,7 @@ void MouseVTKInteractor::OnLeftButtonDown()
         return;
     }
     vtkSmartPointer<vtkActor> actor = picker->GetActor();
-    m_gmw->thisMarblePlayed(actor);
+    m_gmw->humanPlaysThisMarble(actor);
 }
 
 void MouseVTKInteractor::OnMiddleButtonDown()
